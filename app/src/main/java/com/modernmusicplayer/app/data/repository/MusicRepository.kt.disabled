@@ -1,0 +1,191 @@
+package com.modernmusicplayer.app.data.repository
+
+import android.content.Context
+import com.modernmusicplayer.app.data.local.AppDatabase
+import com.modernmusicplayer.app.data.local.entity.SongEntity
+import com.modernmusicplayer.app.data.model.Song
+
+class MusicRepository(context: Context) {
+    
+    private val database = AppDatabase.getDatabase(context)
+    private val songDao = database.songDao()
+    
+    suspend fun getGlobalSongs(limit: Int = 50): Result<List<Song>> {
+        return try {
+            // Try to get from local database first
+            var songsFromDb = songDao.getAllSongs()
+            
+            // If database is empty, populate with demo songs
+            if (songsFromDb.isEmpty()) {
+                val demoSongs = getDemoSongs()
+                val songEntities = demoSongs.map { it.toEntity() }
+                songDao.insertSongs(songEntities)
+                songsFromDb = songDao.getAllSongs()
+            }
+            
+            val songs = songsFromDb.map { it.toSong() }
+            Result.success(songs.take(limit))
+        } catch (e: Exception) {
+            Result.success(getDemoSongs())
+        }
+    }
+    
+    suspend fun searchSongs(query: String): Result<List<Song>> {
+        return try {
+            val songsFromDb = songDao.searchSongs(query)
+            val songs = songsFromDb.map { it.toSong() }
+            Result.success(songs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getSongsByGenre(genre: String): Result<List<Song>> {
+        return try {
+            val songsFromDb = songDao.getAllSongs().filter { it.genre == genre }
+            val songs = songsFromDb.map { it.toSong() }
+            Result.success(songs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun toggleFavorite(songId: String, isFavorite: Boolean): Result<Unit> {
+        return try {
+            songDao.updateFavoriteStatus(songId, isFavorite)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getFavoriteSongs(): Result<List<Song>> {
+        return try {
+            val songsFromDb = songDao.getFavoriteSongs()
+            val songs = songsFromDb.map { it.toSong() }
+            Result.success(songs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    private fun Song.toEntity() = SongEntity(
+        id = id,
+        title = title,
+        artist = artist,
+        album = album,
+        albumArtUrl = albumArtUrl,
+        audioUrl = audioUrl,
+        duration = duration,
+        genre = genre,
+        releaseYear = releaseYear,
+        isFavorite = isFavorite
+    )
+    
+    private fun SongEntity.toSong() = Song(
+        id = id,
+        title = title,
+        artist = artist,
+        album = album,
+        albumArtUrl = albumArtUrl,
+        audioUrl = audioUrl,
+        duration = duration,
+        genre = genre,
+        releaseYear = releaseYear,
+        isFavorite = isFavorite
+    )
+    
+    // Demo songs for testing
+    private fun getDemoSongs(): List<Song> {
+        return listOf(
+            Song(
+                id = "1",
+                title = "Midnight Dreams",
+                artist = "The Nocturnes",
+                album = "Night Sessions",
+                albumArtUrl = "https://picsum.photos/400/400?random=1",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                duration = 240000,
+                genre = "Electronic",
+                releaseYear = 2024
+            ),
+            Song(
+                id = "2",
+                title = "Summer Vibes",
+                artist = "Tropical Wave",
+                album = "Beach Paradise",
+                albumArtUrl = "https://picsum.photos/400/400?random=2",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+                duration = 210000,
+                genre = "Pop",
+                releaseYear = 2024
+            ),
+            Song(
+                id = "3",
+                title = "Urban Nights",
+                artist = "City Lights",
+                album = "Metropolitan",
+                albumArtUrl = "https://picsum.photos/400/400?random=3",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+                duration = 195000,
+                genre = "Hip Hop",
+                releaseYear = 2023
+            ),
+            Song(
+                id = "4",
+                title = "Acoustic Soul",
+                artist = "Strings Attached",
+                album = "Unplugged Sessions",
+                albumArtUrl = "https://picsum.photos/400/400?random=4",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+                duration = 225000,
+                genre = "Acoustic",
+                releaseYear = 2024
+            ),
+            Song(
+                id = "5",
+                title = "Electric Dreams",
+                artist = "Synth Masters",
+                album = "Neon Lights",
+                albumArtUrl = "https://picsum.photos/400/400?random=5",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+                duration = 270000,
+                genre = "Electronic",
+                releaseYear = 2024
+            ),
+            Song(
+                id = "6",
+                title = "Jazz Cafe",
+                artist = "Smooth Trio",
+                album = "Late Night Jazz",
+                albumArtUrl = "https://picsum.photos/400/400?random=6",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+                duration = 300000,
+                genre = "Jazz",
+                releaseYear = 2023
+            ),
+            Song(
+                id = "7",
+                title = "Rock Anthem",
+                artist = "Thunder Strike",
+                album = "Live and Loud",
+                albumArtUrl = "https://picsum.photos/400/400?random=7",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+                duration = 255000,
+                genre = "Rock",
+                releaseYear = 2024
+            ),
+            Song(
+                id = "8",
+                title = "Chill Waves",
+                artist = "Ambient Sounds",
+                album = "Relaxation",
+                albumArtUrl = "https://picsum.photos/400/400?random=8",
+                audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+                duration = 180000,
+                genre = "Ambient",
+                releaseYear = 2024
+            )
+        )
+    }
+}

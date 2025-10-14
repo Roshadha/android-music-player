@@ -1,0 +1,160 @@
+package com.modernmusicplayer.app.data.repository
+
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import com.modernmusicplayer.app.data.local.AppDatabase
+import com.modernmusicplayer.app.data.local.entity.UserEntity
+import com.modernmusicplayer.app.data.model.User
+import java.security.MessageDigest
+
+class AuthRepository(private val context: Context) {
+    
+    private val database = AppDatabase.getDatabase(context)
+    private val userDao = database.userDao()
+    
+    private val sharedPreferences: SharedPreferences by lazy {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        
+        EncryptedSharedPreferences.create(
+            context,
+            "auth_prefs",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+    
+    fun getCurrentUserId(): Long? {
+        val userId = sharedPreferences.getLong("current_user_id", -1L)
+        return if (userId != -1L) userId else null
+    }
+    
+    private fun setCurrentUserId(userId: Long) {
+        sharedPreferences.edit().putLong("current_user_id", userId).apply()
+    }
+    
+    private fun clearCurrentUser() {
+        sharedPreferences.edit().remove("current_user_id").apply()
+    }
+    
+    private fun hashPassword(password: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(password.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+    
+    suspend fun signUp(email: String, password: String, displayName: String): Result<User> {
+        return try {
+            // Check if user already exists
+            val existingUser = userDao.getUserByEmail(email)
+            if (existingUser != null) {
+                throw Exception("User with this email already exists")
+            }
+            
+            // Validate inputs
+            if (email.isEmpty() || !email.contains("@")) {
+                throw Exception("Invalid email address")
+            }
+            if (password.length < 6) {
+                throw Exception("Password must be at least 6 characters")
+            }
+            if (displayName.isEmpty()) {
+                throw Exception("Display name is required")
+            }
+            
+            // Create user
+            val passwordHash = hashPassword(password)
+            val userEntity = UserEntity(
+                email = email,
+                passwordHash = passwordHash,
+                displayName = displayName
+            )
+            
+            val userId = userDao.insertUser(userEntity)
+            setCurrentUserId(userId)
+            
+            val user = User(
+                uid = userId.toString(),
+                email = email,
+                displayName = displayName
+            )
+            
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun signIn(email: String, password: String): Result<User> {
+        return try {
+            val userEntity = userDao.getUserByEmail(email)
+                ?: throw Exception("User not found")
+            
+            val passwordHash = hashPassword(password)
+            if (userEntity.passwordHash != passwordHash) {
+                throw Exception("Incorrect password")
+            }
+            
+            setCurrentUserId(userEntity.id)
+            
+            val user = User(
+                uid = userEntity.id.toString(),
+                email = userEntity.email,
+                displayName = userEntity.displayName,
+                profileImageUrl = userEntity.profileImageUrl,
+                favoritesSongIds = userEntity.favoritesSongIds
+            )
+            
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    fun signOut() {
+        clearCurrentUser()
+    }
+    
+    suspend fun updateUserProfile(displayName: String?, profileImageUrl: String?): Result<Unit> {
+        return try {
+            val userId = getCurrentUserId() ?: throw Exception("No user logged in")
+            val userEntity = userDao.getUserById(userId) ?: throw Exception("User not found")
+            
+            val updatedUser = userEntity.copy(
+                displayName = displayName ?: userEntity.displayName,
+                profileImageUrl = profileImageUrl ?: userEntity.profileImageUrl
+            )
+            
+            userDao.updateUser(updatedUser)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun getUserProfile(): Result<User> {
+        return try {
+            val userId = getCurrentUserId() ?: throw Exception("No user logged in")
+            val userEntity = userDao.getUserById(userId) ?: throw Exception("User not found")
+            
+            val user = User(
+                uid = userEntity.id.toString(),
+                email = userEntity.email,
+                displayName = userEntity.displayName,
+                profileImageUrl = userEntity.profileImageUrl,
+                favoritesSongIds = userEntity.favoritesSongIds
+            )
+            
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun isUserLoggedIn(): Boolean {
+        return getCurrentUserId() != null
+    }
+}
