@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Modern Music Player</string>
+    <string name="app_name">Music Player</string>
     
     <!-- Auth Strings -->
     <string name="sign_in">Sign In</string>
