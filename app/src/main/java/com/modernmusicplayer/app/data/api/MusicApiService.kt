@@ -20,6 +20,24 @@ interface MusicApiService {
     ): Response<DeezerChartResponse>
 }
 
+// iTunes API Service - 30 second previews
+interface ITunesApiService {
+    
+    @GET("search")
+    suspend fun searchMusic(
+        @Query("term") term: String,
+        @Query("media") media: String = "music",
+        @Query("entity") entity: String = "song",
+        @Query("limit") limit: Int = 50
+    ): Response<ITunesSearchResponse>
+    
+    @GET("lookup")
+    suspend fun lookupSong(
+        @Query("id") id: String,
+        @Query("entity") entity: String = "song"
+    ): Response<ITunesSearchResponse>
+}
+
 // JioSaavn API Service for full songs
 interface JioSaavnApiService {
     
@@ -234,3 +252,23 @@ data class YouTubeVideoDetail(
 data class YouTubeContentDetails(
     val duration: String // ISO 8601 format (e.g., PT4M13S)
 )
+
+// iTunes API Response Models
+data class ITunesSearchResponse(
+    val resultCount: Int,
+    val results: List<ITunesTrack>
+)
+
+data class ITunesTrack(
+    val trackId: Long,
+    val trackName: String,
+    val artistName: String,
+    val collectionName: String?, // Album name
+    val artworkUrl100: String?,
+    val artworkUrl60: String?,
+    val previewUrl: String?, // 30-second preview URL
+    val trackTimeMillis: Long?,
+    val primaryGenreName: String?,
+    val releaseDate: String?
+)
+

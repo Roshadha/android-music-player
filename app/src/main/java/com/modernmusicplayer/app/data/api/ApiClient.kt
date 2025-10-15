@@ -13,6 +13,7 @@ object ApiClient {
     private const val JAMENDO_BASE_URL = "https://api.jamendo.com/v3.0/"
     private const val YOUTUBE_BASE_URL = "https://www.googleapis.com/youtube/v3/"
     private const val PIPED_BASE_URL = "https://pipedapi.adminforge.de/" // Piped - German instance
+    private const val ITUNES_BASE_URL = "https://itunes.apple.com/" // iTunes API - No key needed!
     
     // API Keys (public, no authentication needed)
     const val JAMENDO_CLIENT_ID = "56d30c95"
@@ -85,5 +86,14 @@ object ApiClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(PipedApiService::class.java)
+    }
+    
+    val itunesApi: ITunesApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(ITUNES_BASE_URL)
+            .client(getOkHttpClient())
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ITunesApiService::class.java)
     }
 }

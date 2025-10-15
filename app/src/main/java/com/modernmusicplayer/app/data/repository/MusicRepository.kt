@@ -15,6 +15,7 @@ class MusicRepository(private val context: Context) {
     private val jioSaavnApi = ApiClient.jioSaavnApi
     private val jamendoApi = ApiClient.jamendoApi
     private val pipedApi = ApiClient.pipedApi
+    private val itunesApi = ApiClient.itunesApi
     private val cachedSongs = mutableListOf<Song>()
     private var isInitialized = false
     
@@ -29,21 +30,54 @@ class MusicRepository(private val context: Context) {
         try {
             val allSongs = mutableListOf<Song>()
             
-            // YouTube API services are unreliable (403/502 errors)
-            // Using curated music collection instead
             Log.e("MusicRepository", "========================================")
-            Log.e("MusicRepository", "LOADING CURATED MUSIC COLLECTION")
+            Log.e("MusicRepository", "LOADING MUSIC COLLECTION")
             Log.e("MusicRepository", "========================================")
             
+            // 1. Load curated collection first (instant, always works)
             allSongs.addAll(getCuratedMusicCollection())
+            Log.e("MusicRepository", "✓ Loaded ${allSongs.size} curated songs")
             
-            Log.e("MusicRepository", "✓✓✓ LOADED ${allSongs.size} SONGS ✓✓✓")
+            // 2. Load iTunes popular songs (30-second previews)
+            try {
+                val popularTerms = listOf("pop hits 2024", "trending music", "top songs")
+                for (term in popularTerms) {
+                    val itunesResponse = itunesApi.searchMusic(term, limit = 20)
+                    if (itunesResponse.isSuccessful) {
+                        val itunesSongs = itunesResponse.body()?.results
+                            ?.filter { it.previewUrl != null }
+                            ?.map { it.toSong() } ?: emptyList()
+                        allSongs.addAll(itunesSongs)
+                        Log.d("MusicRepository", "iTunes added ${itunesSongs.size} songs for '$term'")
+                    }
+                }
+                Log.e("MusicRepository", "✓ Total with iTunes: ${allSongs.size} songs")
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "iTunes loading error: ${e.message}")
+            }
+            
+            // 3. Load Jamendo free music
+            try {
+                val jamendoResponse = jamendoApi.getTracks(
+                    clientId = ApiClient.JAMENDO_CLIENT_ID,
+                    limit = 30
+                )
+                if (jamendoResponse.isSuccessful) {
+                    val jamendoSongs = jamendoResponse.body()?.results?.map { it.toSong() } ?: emptyList()
+                    allSongs.addAll(jamendoSongs)
+                    Log.e("MusicRepository", "✓ Total with Jamendo: ${allSongs.size} songs")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "Jamendo loading error: ${e.message}")
+            }
+            
+            Log.e("MusicRepository", "✓✓✓ TOTAL LOADED: ${allSongs.size} SONGS ✓✓✓")
             
             if (allSongs.isNotEmpty()) {
                 cachedSongs.clear()
-                cachedSongs.addAll(allSongs)
+                cachedSongs.addAll(allSongs.distinctBy { it.id })
                 isInitialized = true
-                Log.d("MusicRepository", "Total loaded: ${cachedSongs.size} songs")
+                Log.d("MusicRepository", "Final cached songs: ${cachedSongs.size}")
             } else {
                 // Fallback
                 Log.w("MusicRepository", "No songs loaded, using curated collection")
@@ -102,6 +136,20 @@ class MusicRepository(private val context: Context) {
         )
     }
     
+    private fun com.modernmusicplayer.app.data.api.ITunesTrack.toSong(): Song {
+        return Song(
+            id = "itunes_$trackId",
+            title = trackName,
+            artist = artistName,
+            album = collectionName ?: "Single",
+            albumArtUrl = artworkUrl100?.replace("100x100", "500x500") ?: artworkUrl60 ?: "",
+            audioUrl = previewUrl ?: "", // 30-second preview
+            duration = trackTimeMillis ?: 30000,
+            genre = primaryGenreName ?: "Music",
+            releaseYear = releaseDate?.take(4)?.toIntOrNull() ?: 2024
+        )
+    }
+    
     suspend fun searchSongs(query: String): Flow<List<Song>> = flow {
         if (query.isEmpty()) {
             emit(emptyList())
@@ -111,17 +159,50 @@ class MusicRepository(private val context: Context) {
         Log.d("MusicRepository", "Searching for: $query")
         
         try {
-            // Search within loaded songs (YouTube APIs are unreliable)
-            Log.e("MusicRepository", "Searching for: $query")
-            val searchResults = cachedSongs.filter {
+            val allResults = mutableListOf<Song>()
+            
+            // 1. Search in cached songs first (instant results)
+            val cachedResults = cachedSongs.filter {
                 it.title.contains(query, ignoreCase = true) ||
                 it.artist.contains(query, ignoreCase = true) ||
                 it.album.contains(query, ignoreCase = true) ||
                 it.genre.contains(query, ignoreCase = true)
             }
+            allResults.addAll(cachedResults)
+            Log.d("MusicRepository", "Found ${cachedResults.size} cached songs")
             
-            emit(searchResults)
-            Log.e("MusicRepository", "✓ Found ${searchResults.size} songs for '$query'")
+            // 2. Search iTunes API for 30-second previews
+            try {
+                val itunesResponse = itunesApi.searchMusic(query, limit = 50)
+                if (itunesResponse.isSuccessful) {
+                    val itunesSongs = itunesResponse.body()?.results
+                        ?.filter { it.previewUrl != null }
+                        ?.map { it.toSong() } ?: emptyList()
+                    allResults.addAll(itunesSongs)
+                    Log.d("MusicRepository", "iTunes found ${itunesSongs.size} songs with previews")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "iTunes search error: ${e.message}")
+            }
+            
+            // 3. Search Jamendo for free full songs
+            try {
+                val jamendoResponse = jamendoApi.searchTracks(
+                    clientId = ApiClient.JAMENDO_CLIENT_ID,
+                    search = query,
+                    limit = 30
+                )
+                if (jamendoResponse.isSuccessful) {
+                    val jamendoSongs = jamendoResponse.body()?.results?.map { it.toSong() } ?: emptyList()
+                    allResults.addAll(jamendoSongs)
+                    Log.d("MusicRepository", "Jamendo found ${jamendoSongs.size} free songs")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "Jamendo search error: ${e.message}")
+            }
+            
+            emit(allResults.distinctBy { it.id })
+            Log.e("MusicRepository", "✓✓✓ TOTAL SEARCH RESULTS: ${allResults.size} songs for '$query' ✓✓✓")
         } catch (e: Exception) {
             Log.e("MusicRepository", "Search error: ${e.message}")
             val results = cachedSongs.filter {
