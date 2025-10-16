@@ -15,7 +15,10 @@ class MusicRepository(private val context: Context) {
     private val jioSaavnApi = ApiClient.jioSaavnApi
     private val jamendoApi = ApiClient.jamendoApi
     private val pipedApi = ApiClient.pipedApi
-    private val itunesApi = ApiClient.itunesApi
+    private val youtubeApi = ApiClient.youtubeApi
+    private val freeMusicApi = ApiClient.freeMusicApi
+    private val musicBrainzApi = ApiClient.musicBrainzApi
+    private val theAudioDbApi = ApiClient.theAudioDbApi
     private val cachedSongs = mutableListOf<Song>()
     private var isInitialized = false
     
@@ -34,42 +37,9 @@ class MusicRepository(private val context: Context) {
             Log.e("MusicRepository", "LOADING MUSIC COLLECTION")
             Log.e("MusicRepository", "========================================")
             
-            // 1. Load curated collection first (instant, always works)
+            // Load curated collection (30 songs - instant, always works)
             allSongs.addAll(getCuratedMusicCollection())
-            Log.e("MusicRepository", "✓ Loaded ${allSongs.size} curated songs")
-            
-            // 2. Load iTunes popular songs (30-second previews)
-            try {
-                val popularTerms = listOf("pop hits 2024", "trending music", "top songs")
-                for (term in popularTerms) {
-                    val itunesResponse = itunesApi.searchMusic(term, limit = 20)
-                    if (itunesResponse.isSuccessful) {
-                        val itunesSongs = itunesResponse.body()?.results
-                            ?.filter { it.previewUrl != null }
-                            ?.map { it.toSong() } ?: emptyList()
-                        allSongs.addAll(itunesSongs)
-                        Log.d("MusicRepository", "iTunes added ${itunesSongs.size} songs for '$term'")
-                    }
-                }
-                Log.e("MusicRepository", "✓ Total with iTunes: ${allSongs.size} songs")
-            } catch (e: Exception) {
-                Log.e("MusicRepository", "iTunes loading error: ${e.message}")
-            }
-            
-            // 3. Load Jamendo free music
-            try {
-                val jamendoResponse = jamendoApi.getTracks(
-                    clientId = ApiClient.JAMENDO_CLIENT_ID,
-                    limit = 30
-                )
-                if (jamendoResponse.isSuccessful) {
-                    val jamendoSongs = jamendoResponse.body()?.results?.map { it.toSong() } ?: emptyList()
-                    allSongs.addAll(jamendoSongs)
-                    Log.e("MusicRepository", "✓ Total with Jamendo: ${allSongs.size} songs")
-                }
-            } catch (e: Exception) {
-                Log.e("MusicRepository", "Jamendo loading error: ${e.message}")
-            }
+            Log.e("MusicRepository", "✓✓✓ LOADED ${allSongs.size} SONGS ✓✓✓")
             
             Log.e("MusicRepository", "✓✓✓ TOTAL LOADED: ${allSongs.size} SONGS ✓✓✓")
             
@@ -136,18 +106,116 @@ class MusicRepository(private val context: Context) {
         )
     }
     
-    private fun com.modernmusicplayer.app.data.api.ITunesTrack.toSong(): Song {
+    private fun com.modernmusicplayer.app.data.api.MusicBrainzRecording.toSong(): Song? {
+        val artistName = artistCredit?.firstOrNull()?.name ?: "Unknown Artist"
+        val albumName = releases?.firstOrNull()?.title ?: "Single"
+        val duration = length ?: 180000 // Default to 3 minutes if no duration
+        val releaseDate = releases?.firstOrNull()?.date
+        val year = releaseDate?.take(4)?.toIntOrNull() ?: 2024
+        val genreName = genres?.firstOrNull()?.name ?: tags?.firstOrNull()?.name ?: "Unknown"
+        
+        // Get YouTube URL from relations if available
+        val youtubeUrl = relations?.find { 
+            it.type == "youtube" && it.url?.resource?.contains("youtube.com") == true 
+        }?.url?.resource
+        
+        // Try to find cover art from release
+        val coverArtUrl = releases?.firstOrNull()?.let { release ->
+            "https://coverartarchive.org/release/${release.id}/front-250"
+        } ?: "https://picsum.photos/seed/mb$id/500"
+        
         return Song(
-            id = "itunes_$trackId",
-            title = trackName,
+            id = "mb_$id",
+            title = title,
             artist = artistName,
-            album = collectionName ?: "Single",
-            albumArtUrl = artworkUrl100?.replace("100x100", "500x500") ?: artworkUrl60 ?: "",
-            audioUrl = previewUrl ?: "", // 30-second preview
-            duration = trackTimeMillis ?: 30000,
-            genre = primaryGenreName ?: "Music",
-            releaseYear = releaseDate?.take(4)?.toIntOrNull() ?: 2024
+            album = albumName,
+            albumArtUrl = coverArtUrl,
+            audioUrl = youtubeUrl ?: "", // Will be populated from TheAudioDB if available
+            duration = duration.toLong(),
+            genre = genreName,
+            releaseYear = year
         )
+    }
+    
+    private fun com.modernmusicplayer.app.data.api.AudioDbTrack.toSong(): Song? {
+        val artist = strArtist ?: "Unknown Artist"
+        val album = strAlbum ?: "Single"
+        val duration = intDuration?.toLongOrNull() ?: 180000
+        val genre = strGenre ?: strStyle ?: "Music"
+        val coverArt = strTrackThumb ?: "https://picsum.photos/seed/adb$idTrack/500"
+        
+        // Extract YouTube video ID if available
+        val audioUrl = strMusicVid ?: ""
+        
+        return Song(
+            id = "adb_$idTrack",
+            title = strTrack,
+            artist = artist,
+            album = album,
+            albumArtUrl = coverArt,
+            audioUrl = audioUrl, // YouTube URL
+            duration = duration,
+            genre = genre,
+            releaseYear = 2024
+        )
+    }
+    
+    private fun com.modernmusicplayer.app.data.api.AudioDbTrendingTrack.toSong(): Song {
+        val coverArt = strTrackThumb ?: "https://picsum.photos/seed/trend$idTrend/500"
+        
+        return Song(
+            id = "trend_$idTrend",
+            title = strTrack,
+            artist = strArtist,
+            album = strAlbum ?: "Single",
+            albumArtUrl = coverArt,
+            audioUrl = "", // Will need to fetch from search
+            duration = 180000,
+            genre = "Trending",
+            releaseYear = 2024
+        )
+    }
+    
+    private suspend fun com.modernmusicplayer.app.data.api.YouTubeSearchItem.toSongWithAudio(): Song? {
+        // Extract artist and title from video title
+        val titleParts = snippet.title.split("-", limit = 2)
+        val artist = if (titleParts.size > 1) titleParts[0].trim() else snippet.channelTitle
+        val songTitle = if (titleParts.size > 1) titleParts[1].trim() else snippet.title
+        
+        // Get best quality thumbnail
+        val thumbnail = snippet.thumbnails.maxres?.url 
+            ?: snippet.thumbnails.high?.url 
+            ?: snippet.thumbnails.medium?.url 
+            ?: snippet.thumbnails.default?.url ?: ""
+        
+        // Try to find actual audio from JioSaavn using the song title
+        try {
+            val searchQuery = "$artist $songTitle".trim()
+            val jioSaavnResponse = jioSaavnApi.searchSongs(searchQuery, limit = 1)
+            if (jioSaavnResponse.isSuccessful) {
+                val jioSaavnSong = jioSaavnResponse.body()?.data?.results?.firstOrNull()
+                if (jioSaavnSong != null) {
+                    val audioUrl = jioSaavnSong.downloadUrl?.firstOrNull()?.link ?: jioSaavnSong.url
+                    if (audioUrl != null) {
+                        return Song(
+                            id = "youtube_${id.videoId}",
+                            title = songTitle,
+                            artist = artist,
+                            album = "YouTube Music",
+                            albumArtUrl = thumbnail,
+                            audioUrl = audioUrl, // Full song from JioSaavn
+                            duration = jioSaavnSong.duration?.toLongOrNull()?.times(1000) ?: 180000,
+                            genre = "Music",
+                            releaseYear = snippet.publishedAt?.take(4)?.toIntOrNull() ?: 2024
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Failed to get audio for ${id.videoId}: ${e.message}")
+        }
+        
+        return null // Skip if no audio found
     }
     
     suspend fun searchSongs(query: String): Flow<List<Song>> = flow {
@@ -161,7 +229,7 @@ class MusicRepository(private val context: Context) {
         try {
             val allResults = mutableListOf<Song>()
             
-            // 1. Search in cached songs first (instant results)
+            // 1. Search in cached songs (instant results - always works)
             val cachedResults = cachedSongs.filter {
                 it.title.contains(query, ignoreCase = true) ||
                 it.artist.contains(query, ignoreCase = true) ||
@@ -169,40 +237,65 @@ class MusicRepository(private val context: Context) {
                 it.genre.contains(query, ignoreCase = true)
             }
             allResults.addAll(cachedResults)
-            Log.d("MusicRepository", "Found ${cachedResults.size} cached songs")
+            Log.e("MusicRepository", "✓ Cached: ${cachedResults.size} songs")
             
-            // 2. Search iTunes API for 30-second previews
+            // 2. Search MusicBrainz for comprehensive music database
             try {
-                val itunesResponse = itunesApi.searchMusic(query, limit = 50)
-                if (itunesResponse.isSuccessful) {
-                    val itunesSongs = itunesResponse.body()?.results
-                        ?.filter { it.previewUrl != null }
-                        ?.map { it.toSong() } ?: emptyList()
-                    allResults.addAll(itunesSongs)
-                    Log.d("MusicRepository", "iTunes found ${itunesSongs.size} songs with previews")
+                val mbQuery = "recording:\"$query\" OR artist:\"$query\""
+                val mbResponse = musicBrainzApi.searchRecordings(mbQuery, limit = 25)
+                if (mbResponse.isSuccessful) {
+                    val mbRecordings = mbResponse.body()?.recordings ?: emptyList()
+                    val mbSongs = mbRecordings.mapNotNull { it.toSong() }
+                    
+                    // Try to get YouTube URLs from TheAudioDB for MusicBrainz results
+                    mbSongs.forEach { song ->
+                        if (song.audioUrl.isEmpty()) {
+                            try {
+                                val adbResponse = theAudioDbApi.searchTrack(song.artist, song.title)
+                                val adbTrack = adbResponse.body()?.track?.firstOrNull()
+                                if (adbTrack?.strMusicVid?.isNotEmpty() == true) {
+                                    // Update song with YouTube URL from TheAudioDB
+                                    allResults.add(song.copy(audioUrl = adbTrack.strMusicVid))
+                                } else {
+                                    allResults.add(song)
+                                }
+                            } catch (e: Exception) {
+                                allResults.add(song)
+                            }
+                        } else {
+                            allResults.add(song)
+                        }
+                    }
+                    Log.e("MusicRepository", "✓ MusicBrainz: ${mbSongs.size} songs")
                 }
             } catch (e: Exception) {
-                Log.e("MusicRepository", "iTunes search error: ${e.message}")
+                Log.e("MusicRepository", "MusicBrainz search error: ${e.message}")
             }
             
-            // 3. Search Jamendo for free full songs
+            // 3. Search TheAudioDB for additional results with YouTube links
             try {
-                val jamendoResponse = jamendoApi.searchTracks(
-                    clientId = ApiClient.JAMENDO_CLIENT_ID,
-                    search = query,
-                    limit = 30
-                )
-                if (jamendoResponse.isSuccessful) {
-                    val jamendoSongs = jamendoResponse.body()?.results?.map { it.toSong() } ?: emptyList()
-                    allResults.addAll(jamendoSongs)
-                    Log.d("MusicRepository", "Jamendo found ${jamendoSongs.size} free songs")
+                // Try artist search first
+                val adbArtistResponse = theAudioDbApi.searchArtist(query)
+                if (adbArtistResponse.isSuccessful) {
+                    val artist = adbArtistResponse.body()?.artists?.firstOrNull()
+                    if (artist != null) {
+                        // Get top tracks for this artist
+                        val topTracksResponse = theAudioDbApi.getTop10Tracks(artist.strArtist)
+                        if (topTracksResponse.isSuccessful) {
+                            val tracks = topTracksResponse.body()?.track ?: emptyList()
+                            val adbSongs = tracks.mapNotNull { it.toSong() }
+                            allResults.addAll(adbSongs)
+                            Log.e("MusicRepository", "✓ TheAudioDB: ${adbSongs.size} top tracks")
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                Log.e("MusicRepository", "Jamendo search error: ${e.message}")
+                Log.e("MusicRepository", "TheAudioDB search error: ${e.message}")
             }
             
-            emit(allResults.distinctBy { it.id })
-            Log.e("MusicRepository", "✓✓✓ TOTAL SEARCH RESULTS: ${allResults.size} songs for '$query' ✓✓✓")
+            val finalResults = allResults.distinctBy { it.id }
+            emit(finalResults)
+            Log.e("MusicRepository", "✓✓✓ TOTAL SEARCH RESULTS: ${finalResults.size} songs for '$query' ✓✓✓")
         } catch (e: Exception) {
             Log.e("MusicRepository", "Search error: ${e.message}")
             val results = cachedSongs.filter {
@@ -705,5 +798,120 @@ class MusicRepository(private val context: Context) {
             genre = "Music",
             releaseYear = 0
         )
+    }
+    
+    // Get trending songs from TheAudioDB (iTunes charts)
+    suspend fun getTrendingSongs(country: String = "us"): Flow<List<Song>> = flow {
+        try {
+            Log.d("MusicRepository", "Fetching trending songs for $country")
+            
+            val trendingResults = mutableListOf<Song>()
+            
+            // Get trending singles from iTunes via TheAudioDB
+            try {
+                val singlesResponse = theAudioDbApi.getTrendingSongs(
+                    country = country,
+                    type = "itunes",
+                    format = "singles"
+                )
+                if (singlesResponse.isSuccessful) {
+                    val trending = singlesResponse.body()?.trending ?: emptyList()
+                    val songs = trending.map { it.toSong() }
+                    trendingResults.addAll(songs)
+                    Log.e("MusicRepository", "✓ Trending Singles: ${songs.size} songs")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "Trending singles error: ${e.message}")
+            }
+            
+            // Get trending albums from iTunes via TheAudioDB
+            try {
+                val albumsResponse = theAudioDbApi.getTrendingSongs(
+                    country = country,
+                    type = "itunes",
+                    format = "albums"
+                )
+                if (albumsResponse.isSuccessful) {
+                    val trending = albumsResponse.body()?.trending ?: emptyList()
+                    val songs = trending.map { it.toSong() }
+                    trendingResults.addAll(songs)
+                    Log.e("MusicRepository", "✓ Trending Albums: ${songs.size} albums")
+                }
+            } catch (e: Exception) {
+                Log.e("MusicRepository", "Trending albums error: ${e.message}")
+            }
+            
+            // Try to enrich with YouTube URLs from TheAudioDB track search
+            val enrichedResults = trendingResults.map { song ->
+                if (song.audioUrl.isEmpty()) {
+                    try {
+                        val trackResponse = theAudioDbApi.searchTrack(song.artist, song.title)
+                        val track = trackResponse.body()?.track?.firstOrNull()
+                        if (track?.strMusicVid?.isNotEmpty() == true) {
+                            song.copy(audioUrl = track.strMusicVid)
+                        } else {
+                            song
+                        }
+                    } catch (e: Exception) {
+                        song
+                    }
+                } else {
+                    song
+                }
+            }
+            
+            emit(enrichedResults.distinctBy { it.id })
+            Log.e("MusicRepository", "✓✓✓ TOTAL TRENDING: ${enrichedResults.size} songs ✓✓✓")
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Trending error: ${e.message}")
+            emit(emptyList())
+        }
+    }
+    
+    // Search artist details from TheAudioDB
+    suspend fun searchArtistDetails(artistName: String): Flow<com.modernmusicplayer.app.data.api.AudioDbArtist?> = flow {
+        try {
+            val response = theAudioDbApi.searchArtist(artistName)
+            if (response.isSuccessful) {
+                val artist = response.body()?.artists?.firstOrNull()
+                emit(artist)
+            } else {
+                emit(null)
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Artist details error: ${e.message}")
+            emit(null)
+        }
+    }
+    
+    // Get music videos for an artist from TheAudioDB
+    suspend fun getArtistMusicVideos(artistId: String): Flow<List<Song>> = flow {
+        try {
+            val response = theAudioDbApi.getMusicVideos(artistId)
+            if (response.isSuccessful) {
+                val videos = response.body()?.mvids ?: emptyList()
+                val songs = videos.mapNotNull { video ->
+                    video.strMusicVid?.let {
+                        Song(
+                            id = "mv_${video.idTrack ?: video.idArtist}",
+                            title = video.strTrack,
+                            artist = "", // Will be filled by artist name
+                            album = "Music Videos",
+                            albumArtUrl = video.strTrackThumb ?: "",
+                            audioUrl = it, // YouTube URL
+                            duration = 180000,
+                            genre = "Music Video",
+                            releaseYear = 2024
+                        )
+                    }
+                }
+                emit(songs)
+            } else {
+                emit(emptyList())
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Music videos error: ${e.message}")
+            emit(emptyList())
+        }
     }
 }
