@@ -44,10 +44,20 @@ android {
         pickFirst 'lib/*/libcrypto*.so'
     }
 
+    signingConfigs {
+        release {
+            storeFile file('../my-release-key.jks')
+            storePassword 'android123'
+            keyAlias 'my-key-alias'
+            keyPassword 'android123'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
         debug {
             minifyEnabled false
