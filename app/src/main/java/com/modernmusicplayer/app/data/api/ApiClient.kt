@@ -16,12 +16,10 @@ object ApiClient {
     private const val ITUNES_BASE_URL = "https://itunes.apple.com/" // iTunes API - No key needed!
     private const val FREE_MUSIC_BASE_URL = "https://musicapi.x007.workers.dev/" // Free 320kbps music
     private const val MUSICBRAINZ_BASE_URL = "https://musicbrainz.org/ws/2/" // MusicBrainz - Free, no key needed!
-    private const val THEAUDIODB_BASE_URL = "https://www.theaudiodb.com/api/v1/json/2/" // TheAudioDB - Test key "2"
     
     // API Keys (public, no authentication needed)
     const val JAMENDO_CLIENT_ID = "56d30c95"
     const val YOUTUBE_API_KEY = "AIzaSyD2LBWMUTYRsGS6glDKZJrZzvZ5K1NyH_8" // YouTube Data API key
-    const val THEAUDIODB_API_KEY = "2" // Free test key
     
     private fun getLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor().apply {
@@ -133,14 +131,5 @@ object ApiClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(MusicBrainzApiService::class.java)
-    }
-    
-    val theAudioDbApi: TheAudioDbApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl(THEAUDIODB_BASE_URL)
-            .client(getOkHttpClient())
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(TheAudioDbApiService::class.java)
     }
 }
