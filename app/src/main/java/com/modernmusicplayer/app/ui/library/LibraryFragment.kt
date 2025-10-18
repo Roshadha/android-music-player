@@ -498,19 +498,20 @@ class LibraryFragment : Fragment() {
             val parent = binding.localSongsSection.parent as? ViewGroup
             parent?.addView(playlistsContainer)
             
-            // Add FAB to root ConstraintLayout
-            val fab = playlistsFab
-            fab?.id = View.generateViewId()
-            (binding.root as? androidx.constraintlayout.widget.ConstraintLayout)?.addView(fab)
-            
-            // Set constraints programmatically
-            fab?.let { fabView ->
-                val constraintLayout = binding.root as androidx.constraintlayout.widget.ConstraintLayout
-                val constraintSet = androidx.constraintlayout.widget.ConstraintSet()
-                constraintSet.clone(constraintLayout)
-                constraintSet.connect(fabView.id, androidx.constraintlayout.widget.ConstraintSet.END, androidx.constraintlayout.widget.ConstraintSet.PARENT_ID, androidx.constraintlayout.widget.ConstraintSet.END, 48)
-                constraintSet.connect(fabView.id, androidx.constraintlayout.widget.ConstraintSet.BOTTOM, androidx.constraintlayout.widget.ConstraintSet.PARENT_ID, androidx.constraintlayout.widget.ConstraintSet.BOTTOM, 48)
-                constraintSet.applyTo(constraintLayout)
+            // Add FAB to root ConstraintLayout with LayoutParams
+            playlistsFab?.let { fab ->
+                fab.id = View.generateViewId()
+                val marginPx = (48 * resources.displayMetrics.density).toInt()
+                val layoutParams = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams(
+                    androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                    androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    endToEnd = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                    bottomToBottom = androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+                    setMargins(0, 0, marginPx, marginPx)
+                }
+                fab.layoutParams = layoutParams
+                (binding.root as? androidx.constraintlayout.widget.ConstraintLayout)?.addView(fab)
             }
         }
         
