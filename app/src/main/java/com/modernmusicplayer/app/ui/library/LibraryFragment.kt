@@ -498,9 +498,20 @@ class LibraryFragment : Fragment() {
             val parent = binding.localSongsSection.parent as? ViewGroup
             parent?.addView(playlistsContainer)
             
-            // Add FAB to root coordinator layout
-            val rootLayout = binding.root.parent as? ViewGroup
-            rootLayout?.addView(playlistsFab)
+            // Add FAB to root ConstraintLayout
+            val fab = playlistsFab
+            fab?.id = View.generateViewId()
+            (binding.root as? androidx.constraintlayout.widget.ConstraintLayout)?.addView(fab)
+            
+            // Set constraints programmatically
+            fab?.let { fabView ->
+                val constraintLayout = binding.root as androidx.constraintlayout.widget.ConstraintLayout
+                val constraintSet = androidx.constraintlayout.widget.ConstraintSet()
+                constraintSet.clone(constraintLayout)
+                constraintSet.connect(fabView.id, androidx.constraintlayout.widget.ConstraintSet.END, androidx.constraintlayout.widget.ConstraintSet.PARENT_ID, androidx.constraintlayout.widget.ConstraintSet.END, 48)
+                constraintSet.connect(fabView.id, androidx.constraintlayout.widget.ConstraintSet.BOTTOM, androidx.constraintlayout.widget.ConstraintSet.PARENT_ID, androidx.constraintlayout.widget.ConstraintSet.BOTTOM, 48)
+                constraintSet.applyTo(constraintLayout)
+            }
         }
         
         // Setup adapter
