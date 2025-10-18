@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -32,7 +33,12 @@ class LibraryFragment : Fragment() {
     private val binding get() = _binding!!
     
     private lateinit var songAdapter: SongAdapter
+    private lateinit var playlistAdapter: com.modernmusicplayer.app.ui.adapters.PlaylistAdapter
+    private lateinit var favoritesAdapter: SongAdapter
+    
     private val localSongs = mutableListOf<Song>()
+    private val playlists = mutableListOf<com.modernmusicplayer.app.data.local.PreferencesManager.PlaylistData>()
+    private val favoriteSongs = mutableListOf<Song>()
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -57,8 +63,13 @@ class LibraryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         setupRecyclerView()
+        setupPlaylistsSection()
+        setupFavoritesSection()
         setupListeners()
         setupTabs()
+        
+        // Show local songs by default
+        showLocalSongs()
         
         // Auto-scan local music on startup if permission granted
         checkAndAutoScanLocalMusic()
@@ -68,26 +79,35 @@ class LibraryFragment : Fragment() {
         binding.tabLayout.addOnTabSelectedListener(object : com.google.android.material.tabs.TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: com.google.android.material.tabs.TabLayout.Tab?) {
                 when (tab?.position) {
-                    0 -> {
-                        // Local Songs tab - stay here
-                        binding.localSongsSection.visibility = View.VISIBLE
-                    }
-                    1 -> {
-                        // Playlists tab - navigate using NavController
-                        androidx.navigation.Navigation.findNavController(requireView())
-                            .navigate(R.id.nav_playlists)
-                    }
-                    2 -> {
-                        // Favorites tab - navigate to favorites
-                        androidx.navigation.Navigation.findNavController(requireView())
-                            .navigate(R.id.nav_favorites)
-                    }
+                    0 -> showLocalSongs()
+                    1 -> showPlaylists()
+                    2 -> showFavorites()
                 }
             }
 
             override fun onTabUnselected(tab: com.google.android.material.tabs.TabLayout.Tab?) {}
             override fun onTabReselected(tab: com.google.android.material.tabs.TabLayout.Tab?) {}
         })
+    }
+    
+    private fun showLocalSongs() {
+        binding.localSongsSection.visibility = View.VISIBLE
+        hidePlaylistsSection()
+        hideFavoritesSection()
+    }
+    
+    private fun showPlaylists() {
+        binding.localSongsSection.visibility = View.GONE
+        showPlaylistsSection()
+        hideFavoritesSection()
+        loadPlaylists()
+    }
+    
+    private fun showFavorites() {
+        binding.localSongsSection.visibility = View.GONE
+        hidePlaylistsSection()
+        showFavoritesSection()
+        loadFavorites()
     }
     
     private fun checkAndAutoScanLocalMusic() {
@@ -403,6 +423,131 @@ class LibraryFragment : Fragment() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+    
+    // Playlists section methods
+    private var playlistsRecyclerView: androidx.recyclerview.widget.RecyclerView? = null
+    private var playlistsContainer: LinearLayout? = null
+    
+    private fun setupPlaylistsSection() {
+        // Create playlists container if it doesn't exist
+        if (playlistsContainer == null) {
+            playlistsContainer = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                visibility = View.GONE
+            }
+            
+            playlistsRecyclerView = androidx.recyclerview.widget.RecyclerView(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                layoutManager = LinearLayoutManager(requireContext())
+            }
+            
+            playlistsContainer?.addView(playlistsRecyclerView)
+            
+            // Add to parent layout
+            val parent = binding.localSongsSection.parent as? ViewGroup
+            parent?.addView(playlistsContainer)
+        }
+        
+        // Setup adapter
+        playlistAdapter = com.modernmusicplayer.app.ui.adapters.PlaylistAdapter(
+            onPlaylistClick = { playlist ->
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Opening ${playlist.name}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            },
+            onMoreClick = { playlist ->
+                // TODO: Show playlist options
+            }
+        )
+        playlistsRecyclerView?.adapter = playlistAdapter
+    }
+    
+    private fun showPlaylistsSection() {
+        playlistsContainer?.visibility = View.VISIBLE
+    }
+    
+    private fun hidePlaylistsSection() {
+        playlistsContainer?.visibility = View.GONE
+    }
+    
+    private fun loadPlaylists() {
+        val mainActivity = requireActivity() as MainActivity
+        playlists.clear()
+        playlists.addAll(mainActivity.musicRepository.getPlaylists())
+        playlistAdapter.submitList(playlists)
+    }
+    
+    // Favorites section methods
+    private var favoritesRecyclerView: androidx.recyclerview.widget.RecyclerView? = null
+    private var favoritesContainer: LinearLayout? = null
+    
+    private fun setupFavoritesSection() {
+        // Create favorites container if it doesn't exist
+        if (favoritesContainer == null) {
+            favoritesContainer = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                visibility = View.GONE
+            }
+            
+            favoritesRecyclerView = androidx.recyclerview.widget.RecyclerView(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                layoutManager = LinearLayoutManager(requireContext())
+            }
+            
+            favoritesContainer?.addView(favoritesRecyclerView)
+            
+            // Add to parent layout
+            val parent = binding.localSongsSection.parent as? ViewGroup
+            parent?.addView(favoritesContainer)
+        }
+        
+        // Setup adapter
+        favoritesAdapter = SongAdapter(
+            onSongClick = { song ->
+                val mainActivity = requireActivity() as MainActivity
+                mainActivity.musicPlayerManager.playPlaylist(favoriteSongs, favoriteSongs.indexOf(song))
+            },
+            onMoreClick = { song ->
+                showMoreOptions(song)
+            }
+        )
+        favoritesRecyclerView?.adapter = favoritesAdapter
+    }
+    
+    private fun showFavoritesSection() {
+        favoritesContainer?.visibility = View.VISIBLE
+    }
+    
+    private fun hideFavoritesSection() {
+        favoritesContainer?.visibility = View.GONE
+    }
+    
+    private fun loadFavorites() {
+        val mainActivity = requireActivity() as MainActivity
+        lifecycleScope.launch {
+            mainActivity.musicRepository.getFavoriteSongsPersistent().collect { songs ->
+                favoriteSongs.clear()
+                favoriteSongs.addAll(songs)
+                favoritesAdapter.submitList(songs)
+            }
+        }
     }
     
     override fun onDestroyView() {
