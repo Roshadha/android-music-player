@@ -428,6 +428,8 @@ class LibraryFragment : Fragment() {
     // Playlists section methods
     private var playlistsRecyclerView: androidx.recyclerview.widget.RecyclerView? = null
     private var playlistsContainer: LinearLayout? = null
+    private var playlistsFab: com.google.android.material.floatingactionbutton.FloatingActionButton? = null
+    private var playlistsEmptyText: android.widget.TextView? = null
     
     private fun setupPlaylistsSection() {
         // Create playlists container if it doesn't exist
@@ -436,11 +438,34 @@ class LibraryFragment : Fragment() {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                    LinearLayout.LayoutParams.MATCH_PARENT
                 )
                 visibility = View.GONE
+                setPadding(16, 16, 16, 100) // Bottom padding for FAB
             }
             
+            // Add title
+            val titleText = android.widget.TextView(requireContext()).apply {
+                text = "My Playlists"
+                textSize = 20f
+                setTextColor(android.graphics.Color.WHITE)
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, 24)
+            }
+            playlistsContainer?.addView(titleText)
+            
+            // Add empty state
+            playlistsEmptyText = android.widget.TextView(requireContext()).apply {
+                text = "No playlists yet.\nTap the + button to create your first playlist!"
+                textSize = 16f
+                setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                gravity = android.view.Gravity.CENTER
+                setPadding(32, 100, 32, 32)
+                visibility = View.GONE
+            }
+            playlistsContainer?.addView(playlistsEmptyText)
+            
+            // Add RecyclerView
             playlistsRecyclerView = androidx.recyclerview.widget.RecyclerView(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -448,12 +473,34 @@ class LibraryFragment : Fragment() {
                 )
                 layoutManager = LinearLayoutManager(requireContext())
             }
-            
             playlistsContainer?.addView(playlistsRecyclerView)
+            
+            // Add FAB button
+            playlistsFab = com.google.android.material.floatingactionbutton.FloatingActionButton(requireContext()).apply {
+                val fabParams = androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
+                    setMargins(0, 0, 48, 48)
+                }
+                layoutParams = fabParams
+                setImageResource(android.R.drawable.ic_input_add)
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#8B5CF6")
+                )
+                imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+                setOnClickListener { showCreatePlaylistDialog() }
+                visibility = View.GONE
+            }
             
             // Add to parent layout
             val parent = binding.localSongsSection.parent as? ViewGroup
             parent?.addView(playlistsContainer)
+            
+            // Add FAB to root coordinator layout
+            val rootLayout = binding.root.parent as? ViewGroup
+            rootLayout?.addView(playlistsFab)
         }
         
         // Setup adapter
@@ -461,12 +508,12 @@ class LibraryFragment : Fragment() {
             onPlaylistClick = { playlist ->
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "Opening ${playlist.name}",
+                    "Opening ${playlist.name} - ${playlist.songIds.size} songs",
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             },
             onMoreClick = { playlist ->
-                // TODO: Show playlist options
+                showPlaylistOptions(playlist)
             }
         )
         playlistsRecyclerView?.adapter = playlistAdapter
@@ -474,22 +521,97 @@ class LibraryFragment : Fragment() {
     
     private fun showPlaylistsSection() {
         playlistsContainer?.visibility = View.VISIBLE
+        playlistsFab?.visibility = View.VISIBLE
     }
     
     private fun hidePlaylistsSection() {
         playlistsContainer?.visibility = View.GONE
+        playlistsFab?.visibility = View.GONE
     }
     
     private fun loadPlaylists() {
         val mainActivity = requireActivity() as MainActivity
         playlists.clear()
         playlists.addAll(mainActivity.musicRepository.getPlaylists())
+        
+        if (playlists.isEmpty()) {
+            playlistsRecyclerView?.visibility = View.GONE
+            playlistsEmptyText?.visibility = View.VISIBLE
+        } else {
+            playlistsRecyclerView?.visibility = View.VISIBLE
+            playlistsEmptyText?.visibility = View.GONE
+        }
+        
         playlistAdapter.submitList(playlists)
+    }
+    
+    private fun showPlaylistOptions(playlist: com.modernmusicplayer.app.data.local.PreferencesManager.PlaylistData) {
+        val options = arrayOf("Rename", "Delete")
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle(playlist.name)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showRenamePlaylistDialog(playlist)
+                    1 -> showDeletePlaylistConfirmation(playlist)
+                }
+            }
+            .show()
+    }
+    
+    private fun showRenamePlaylistDialog(playlist: com.modernmusicplayer.app.data.local.PreferencesManager.PlaylistData) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_create_playlist, null)
+        val nameEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.playlistNameEditText)
+        val descEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.playlistDescriptionEditText)
+        val mainActivity = requireActivity() as MainActivity
+        
+        nameEditText.setText(playlist.name)
+        descEditText.setText(playlist.description)
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .setTitle("Rename Playlist")
+            .setPositiveButton("Save") { _, _ ->
+                val name = nameEditText.text.toString().trim()
+                val description = descEditText.text.toString().trim()
+                
+                if (name.isNotEmpty()) {
+                    mainActivity.musicRepository.updatePlaylist(playlist.id, name, description)
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Playlist updated",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    loadPlaylists()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showDeletePlaylistConfirmation(playlist: com.modernmusicplayer.app.data.local.PreferencesManager.PlaylistData) {
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Delete Playlist")
+            .setMessage("Are you sure you want to delete \"${playlist.name}\"?")
+            .setPositiveButton("Delete") { _, _ ->
+                val mainActivity = requireActivity() as MainActivity
+                mainActivity.musicRepository.deletePlaylist(playlist.id)
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Playlist deleted",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                loadPlaylists()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
     
     // Favorites section methods
     private var favoritesRecyclerView: androidx.recyclerview.widget.RecyclerView? = null
     private var favoritesContainer: LinearLayout? = null
+    private var favoritesEmptyText: android.widget.TextView? = null
+    private var favoritesCountText: android.widget.TextView? = null
     
     private fun setupFavoritesSection() {
         // Create favorites container if it doesn't exist
@@ -498,11 +620,43 @@ class LibraryFragment : Fragment() {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                    LinearLayout.LayoutParams.MATCH_PARENT
                 )
                 visibility = View.GONE
+                setPadding(16, 16, 16, 16)
             }
             
+            // Add title
+            val titleText = android.widget.TextView(requireContext()).apply {
+                text = "Favorite Songs"
+                textSize = 20f
+                setTextColor(android.graphics.Color.WHITE)
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setPadding(0, 0, 0, 8)
+            }
+            favoritesContainer?.addView(titleText)
+            
+            // Add count text
+            favoritesCountText = android.widget.TextView(requireContext()).apply {
+                text = "0 songs"
+                textSize = 14f
+                setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                setPadding(0, 0, 0, 24)
+            }
+            favoritesContainer?.addView(favoritesCountText)
+            
+            // Add empty state
+            favoritesEmptyText = android.widget.TextView(requireContext()).apply {
+                text = "No favorite songs yet.\nTap the heart icon on any song to add it to your favorites!"
+                textSize = 16f
+                setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                gravity = android.view.Gravity.CENTER
+                setPadding(32, 100, 32, 32)
+                visibility = View.GONE
+            }
+            favoritesContainer?.addView(favoritesEmptyText)
+            
+            // Add RecyclerView
             favoritesRecyclerView = androidx.recyclerview.widget.RecyclerView(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -510,7 +664,6 @@ class LibraryFragment : Fragment() {
                 )
                 layoutManager = LinearLayoutManager(requireContext())
             }
-            
             favoritesContainer?.addView(favoritesRecyclerView)
             
             // Add to parent layout
@@ -545,6 +698,17 @@ class LibraryFragment : Fragment() {
             mainActivity.musicRepository.getFavoriteSongsPersistent().collect { songs ->
                 favoriteSongs.clear()
                 favoriteSongs.addAll(songs)
+                
+                if (songs.isEmpty()) {
+                    favoritesRecyclerView?.visibility = View.GONE
+                    favoritesEmptyText?.visibility = View.VISIBLE
+                    favoritesCountText?.text = "0 songs"
+                } else {
+                    favoritesRecyclerView?.visibility = View.VISIBLE
+                    favoritesEmptyText?.visibility = View.GONE
+                    favoritesCountText?.text = "${songs.size} ${if (songs.size == 1) "song" else "songs"}"
+                }
+                
                 favoritesAdapter.submitList(songs)
             }
         }
