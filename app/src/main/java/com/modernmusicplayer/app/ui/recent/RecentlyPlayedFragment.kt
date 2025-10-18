@@ -52,7 +52,7 @@ class RecentlyPlayedFragment : Fragment() {
                 mainActivity.musicPlayerManager.playPlaylist(recentSongs, recentSongs.indexOf(song))
             },
             onMoreClick = { song ->
-                // TODO: Show more options
+                showMoreOptions(song)
             }
         )
         
@@ -108,6 +108,81 @@ class RecentlyPlayedFragment : Fragment() {
                 }
             }
         }
+    }
+    
+    private fun showMoreOptions(song: Song) {
+        val popupMenu = android.widget.PopupMenu(requireContext(), binding.root)
+        popupMenu.menuInflater.inflate(com.modernmusicplayer.app.R.menu.song_options_menu, popupMenu.menu)
+        
+        // Update menu item visibility based on favorite status
+        lifecycleScope.launch {
+            val mainActivity = requireActivity() as MainActivity
+            val isFavorite = mainActivity.musicRepository.isFavoritePersistent(song.id)
+            popupMenu.menu.findItem(com.modernmusicplayer.app.R.id.action_add_to_favorites)?.isVisible = !isFavorite
+            popupMenu.menu.findItem(com.modernmusicplayer.app.R.id.action_remove_from_favorites)?.isVisible = isFavorite
+            
+            popupMenu.setOnMenuItemClickListener { menuItem ->
+                when (menuItem.itemId) {
+                    com.modernmusicplayer.app.R.id.action_add_to_favorites -> {
+                        addToFavorites(song)
+                        true
+                    }
+                    com.modernmusicplayer.app.R.id.action_remove_from_favorites -> {
+                        removeFromFavorites(song)
+                        true
+                    }
+                    com.modernmusicplayer.app.R.id.action_add_to_playlist -> {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Add to playlist coming soon!",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                        true
+                    }
+                    com.modernmusicplayer.app.R.id.action_share -> {
+                        shareSong(song)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            
+            popupMenu.show()
+        }
+    }
+    
+    private fun addToFavorites(song: Song) {
+        lifecycleScope.launch {
+            val mainActivity = requireActivity() as MainActivity
+            mainActivity.musicRepository.toggleFavoritePersistent(song.id)
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Added to Favorites",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    private fun removeFromFavorites(song: Song) {
+        lifecycleScope.launch {
+            val mainActivity = requireActivity() as MainActivity
+            mainActivity.musicRepository.toggleFavoritePersistent(song.id)
+            android.widget.Toast.makeText(
+                requireContext(),
+                "Removed from Favorites",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    
+    private fun shareSong(song: Song) {
+        val shareText = "Check out this song: ${song.title} by ${song.artist}"
+        val shareIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+            type = "text/plain"
+        }
+        startActivity(android.content.Intent.createChooser(shareIntent, "Share song via"))
     }
     
     override fun onDestroyView() {

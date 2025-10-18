@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_add_to_favorites"
+        android:icon="@drawable/ic_favorite_border"
+        android:title="Add to Favorites" />
+    
+    <item
+        android:id="@+id/action_remove_from_favorites"
+        android:icon="@drawable/ic_favorite"
+        android:title="Remove from Favorites" />
+    
+    <item
+        android:id="@+id/action_add_to_playlist"
+        android:icon="@drawable/ic_library"
+        android:title="Add to Playlist" />
+    
+    <item
+        android:id="@+id/action_share"
+        android:icon="@drawable/ic_search"
+        android:title="Share" />
+</menu>
