@@ -22,7 +22,28 @@
     <fragment
         android:id="@+id/nav_library"
         android:name="com.modernmusicplayer.app.ui.library.LibraryFragment"
-        android:label="@string/nav_library" />
+        android:label="@string/nav_library" >
+        <action
+            android:id="@+id/action_library_to_playlist_detail"
+            app:destination="@id/nav_playlist_detail" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_playlist_detail"
+        android:name="com.modernmusicplayer.app.ui.playlist.PlaylistDetailFragment"
+        android:label="Playlist" >
+        <argument
+            android:name="playlistId"
+            app:argType="string" />
+        <argument
+            android:name="playlistName"
+            app:argType="string" />
+        <argument
+            android:name="playlistDescription"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="" />
+    </fragment>
 
     <fragment
         android:id="@+id/nav_favorites"

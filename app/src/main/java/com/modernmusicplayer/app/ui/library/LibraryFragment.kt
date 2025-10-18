@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.modernmusicplayer.app.R
 import com.modernmusicplayer.app.data.model.Song
@@ -518,11 +519,13 @@ class LibraryFragment : Fragment() {
         // Setup adapter
         playlistAdapter = com.modernmusicplayer.app.ui.adapters.PlaylistAdapter(
             onPlaylistClick = { playlist ->
-                android.widget.Toast.makeText(
-                    requireContext(),
-                    "Opening ${playlist.name} - ${playlist.songIds.size} songs",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
+                // Navigate to playlist detail
+                val action = LibraryFragmentDirections.actionLibraryToPlaylistDetail(
+                    playlistId = playlist.id,
+                    playlistName = playlist.name,
+                    playlistDescription = playlist.description ?: ""
+                )
+                findNavController().navigate(action)
             },
             onMoreClick = { playlist ->
                 showPlaylistOptions(playlist)
