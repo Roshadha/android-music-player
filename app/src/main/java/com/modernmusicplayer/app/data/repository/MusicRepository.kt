@@ -797,4 +797,46 @@ class MusicRepository(private val context: Context) {
         emit(allSongs)
     }
     
+    // Playlist management
+    fun createPlaylist(name: String, description: String = ""): PreferencesManager.PlaylistData {
+        return prefsManager.createPlaylist(name, description)
+    }
+    
+    fun updatePlaylist(playlistId: String, name: String? = null, description: String? = null) {
+        prefsManager.updatePlaylist(playlistId, name, description)
+    }
+    
+    fun deletePlaylist(playlistId: String) {
+        prefsManager.deletePlaylist(playlistId)
+    }
+    
+    fun addSongToPlaylist(playlistId: String, songId: String) {
+        prefsManager.addSongToPlaylist(playlistId, songId)
+    }
+    
+    fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        prefsManager.removeSongFromPlaylist(playlistId, songId)
+    }
+    
+    fun getPlaylists(): List<PreferencesManager.PlaylistData> {
+        return prefsManager.getPlaylists()
+    }
+    
+    fun getPlaylist(playlistId: String): PreferencesManager.PlaylistData? {
+        return prefsManager.getPlaylist(playlistId)
+    }
+    
+    suspend fun getPlaylistSongs(playlistId: String): Flow<List<Song>> = flow {
+        val playlist = prefsManager.getPlaylist(playlistId)
+        if (playlist != null) {
+            val allSongs = cachedSongs + localMusicCache
+            val playlistSongs = playlist.songIds.mapNotNull { songId ->
+                allSongs.find { it.id == songId }
+            }
+            emit(playlistSongs)
+        } else {
+            emit(emptyList())
+        }
+    }
+    
 }

@@ -173,11 +173,7 @@ class SearchFragment : Fragment() {
                         true
                     }
                     R.id.action_add_to_playlist -> {
-                        android.widget.Toast.makeText(
-                            requireContext(),
-                            "Add to playlist coming soon!",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                        showPlaylistSelector(song)
                         true
                     }
                     R.id.action_share -> {
@@ -243,6 +239,81 @@ class SearchFragment : Fragment() {
         binding.emptyStateLayout.isVisible = false
         binding.noResultsLayout.isVisible = false
         binding.searchRecyclerView.isVisible = true
+    }
+    
+    private fun showPlaylistSelector(song: Song) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_select_playlist, null)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .create()
+        
+        val recyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.playlistsRecyclerView)
+        val emptyText = dialogView.findViewById<android.widget.TextView>(R.id.emptyPlaylistsText)
+        val createButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.createNewPlaylistButton)
+        
+        val playlists = musicRepository.getPlaylists()
+        
+        if (playlists.isEmpty()) {
+            recyclerView.visibility = android.view.View.GONE
+            emptyText.visibility = android.view.View.VISIBLE
+        } else {
+            recyclerView.visibility = android.view.View.VISIBLE
+            emptyText.visibility = android.view.View.GONE
+            
+            recyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(requireContext())
+            recyclerView.adapter = com.modernmusicplayer.app.ui.adapters.PlaylistSelectorAdapter(playlists) { playlist ->
+                musicRepository.addSongToPlaylist(playlist.id, song.id)
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Added to ${playlist.name}",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                dialog.dismiss()
+            }
+        }
+        
+        createButton.setOnClickListener {
+            dialog.dismiss()
+            showCreatePlaylistDialog(song)
+        }
+        
+        dialog.show()
+    }
+    
+    private fun showCreatePlaylistDialog(song: Song? = null) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_create_playlist, null)
+        val nameEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.playlistNameEditText)
+        val descEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.playlistDescriptionEditText)
+        
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogView)
+            .setPositiveButton("Create") { _, _ ->
+                val name = nameEditText.text.toString().trim()
+                val description = descEditText.text.toString().trim()
+                
+                if (name.isNotEmpty()) {
+                    val playlist = musicRepository.createPlaylist(name, description)
+                    
+                    // Add song if provided
+                    song?.let {
+                        musicRepository.addSongToPlaylist(playlist.id, it.id)
+                    }
+                    
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Playlist created${if (song != null) " and song added" else ""}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Please enter a playlist name",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
     
     override fun onDestroyView() {

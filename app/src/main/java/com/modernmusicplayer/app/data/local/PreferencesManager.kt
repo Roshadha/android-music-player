@@ -17,6 +17,7 @@ class PreferencesManager(context: Context) {
     companion object {
         private const val KEY_FAVORITES = "favorite_song_ids"
         private const val KEY_RECENT_TRACKS = "recent_tracks"
+        private const val KEY_PLAYLISTS = "user_playlists"
         private const val MAX_RECENT_TRACKS = 50
     }
     
@@ -100,5 +101,100 @@ class PreferencesManager(context: Context) {
     
     fun clearFavorites() {
         prefs.edit().remove(KEY_FAVORITES).apply()
+    }
+    
+    // Playlist management
+    data class PlaylistData(
+        val id: String,
+        val name: String,
+        val description: String = "",
+        val songIds: List<String> = emptyList(),
+        val createdAt: Long = System.currentTimeMillis(),
+        val updatedAt: Long = System.currentTimeMillis()
+    )
+    
+    fun createPlaylist(name: String, description: String = ""): PlaylistData {
+        val playlists = getPlaylists().toMutableList()
+        val newPlaylist = PlaylistData(
+            id = "playlist_${System.currentTimeMillis()}",
+            name = name,
+            description = description,
+            songIds = emptyList(),
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        playlists.add(newPlaylist)
+        savePlaylists(playlists)
+        return newPlaylist
+    }
+    
+    fun updatePlaylist(playlistId: String, name: String? = null, description: String? = null) {
+        val playlists = getPlaylists().toMutableList()
+        val index = playlists.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val playlist = playlists[index]
+            playlists[index] = playlist.copy(
+                name = name ?: playlist.name,
+                description = description ?: playlist.description,
+                updatedAt = System.currentTimeMillis()
+            )
+            savePlaylists(playlists)
+        }
+    }
+    
+    fun deletePlaylist(playlistId: String) {
+        val playlists = getPlaylists().toMutableList()
+        playlists.removeAll { it.id == playlistId }
+        savePlaylists(playlists)
+    }
+    
+    fun addSongToPlaylist(playlistId: String, songId: String) {
+        val playlists = getPlaylists().toMutableList()
+        val index = playlists.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val playlist = playlists[index]
+            if (!playlist.songIds.contains(songId)) {
+                val updatedSongIds = playlist.songIds.toMutableList()
+                updatedSongIds.add(songId)
+                playlists[index] = playlist.copy(
+                    songIds = updatedSongIds,
+                    updatedAt = System.currentTimeMillis()
+                )
+                savePlaylists(playlists)
+            }
+        }
+    }
+    
+    fun removeSongFromPlaylist(playlistId: String, songId: String) {
+        val playlists = getPlaylists().toMutableList()
+        val index = playlists.indexOfFirst { it.id == playlistId }
+        if (index != -1) {
+            val playlist = playlists[index]
+            val updatedSongIds = playlist.songIds.toMutableList()
+            updatedSongIds.remove(songId)
+            playlists[index] = playlist.copy(
+                songIds = updatedSongIds,
+                updatedAt = System.currentTimeMillis()
+            )
+            savePlaylists(playlists)
+        }
+    }
+    
+    fun getPlaylists(): List<PlaylistData> {
+        val json = prefs.getString(KEY_PLAYLISTS, null) ?: return emptyList()
+        val type = object : TypeToken<List<PlaylistData>>() {}.type
+        return gson.fromJson(json, type)
+    }
+    
+    fun getPlaylist(playlistId: String): PlaylistData? {
+        return getPlaylists().find { it.id == playlistId }
+    }
+    
+    private fun savePlaylists(playlists: List<PlaylistData>) {
+        prefs.edit().putString(KEY_PLAYLISTS, gson.toJson(playlists)).apply()
+    }
+    
+    fun clearPlaylists() {
+        prefs.edit().remove(KEY_PLAYLISTS).apply()
     }
 }
