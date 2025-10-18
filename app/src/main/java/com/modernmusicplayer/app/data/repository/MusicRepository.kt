@@ -5,6 +5,7 @@ import android.util.Log
 import com.modernmusicplayer.app.data.api.ApiClient
 import com.modernmusicplayer.app.data.api.DeezerTrack
 import com.modernmusicplayer.app.data.api.JioSaavnSong
+import com.modernmusicplayer.app.data.local.PreferencesManager
 import com.modernmusicplayer.app.data.model.Song
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -19,7 +20,9 @@ class MusicRepository(private val context: Context) {
     private val freeMusicApi = ApiClient.freeMusicApi
     private val musicBrainzApi = ApiClient.musicBrainzApi
     private val itunesApi = ApiClient.itunesApi
+    private val prefsManager = PreferencesManager(context)
     private val cachedSongs = mutableListOf<Song>()
+    private val localMusicCache = mutableListOf<Song>()
     private var isInitialized = false
     
     suspend fun getGlobalSongs(): Flow<List<Song>> = flow {
@@ -746,6 +749,52 @@ class MusicRepository(private val context: Context) {
             genre = "Music",
             releaseYear = 0
         )
+    }
+    
+    // Favorites management
+    fun toggleFavoritePersistent(songId: String): Boolean {
+        return prefsManager.toggleFavorite(songId)
+    }
+    
+    fun isFavoritePersistent(songId: String): Boolean {
+        return prefsManager.isFavorite(songId)
+    }
+    
+    suspend fun getFavoriteSongsPersistent(): Flow<List<Song>> = flow {
+        val favoriteIds = prefsManager.getFavorites()
+        val allSongs = cachedSongs + localMusicCache
+        val favoriteSongs = allSongs.filter { favoriteIds.contains(it.id) }
+        emit(favoriteSongs)
+    }
+    
+    // Recently played management
+    fun addRecentlyPlayed(songId: String) {
+        prefsManager.addRecentTrack(songId)
+    }
+    
+    suspend fun getRecentlyPlayed(): Flow<List<Song>> = flow {
+        val recentIds = prefsManager.getRecentTrackIds()
+        val allSongs = cachedSongs + localMusicCache
+        val recentSongs = recentIds.mapNotNull { id ->
+            allSongs.find { it.id == id }
+        }
+        emit(recentSongs)
+    }
+    
+    // Local music cache management
+    fun cacheLocalMusic(songs: List<Song>) {
+        localMusicCache.clear()
+        localMusicCache.addAll(songs)
+        Log.d("MusicRepository", "Cached ${songs.size} local songs")
+    }
+    
+    fun getLocalMusicCache(): List<Song> {
+        return localMusicCache.toList()
+    }
+    
+    suspend fun getAllAvailableSongs(): Flow<List<Song>> = flow {
+        val allSongs = (cachedSongs + localMusicCache).distinctBy { it.id }
+        emit(allSongs)
     }
     
 }

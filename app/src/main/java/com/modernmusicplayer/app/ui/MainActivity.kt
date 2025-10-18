@@ -17,6 +17,10 @@ class MainActivity : AppCompatActivity() {
     lateinit var musicPlayerManager: MusicPlayerManager
         private set
     
+    val musicRepository by lazy {
+        com.modernmusicplayer.app.data.repository.MusicRepository(this)
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         

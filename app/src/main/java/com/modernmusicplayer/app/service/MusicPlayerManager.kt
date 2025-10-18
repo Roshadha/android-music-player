@@ -76,6 +76,10 @@ class MusicPlayerManager(private val context: Context) {
     fun playSong(song: Song) {
         _currentSong.value = song
         
+        // Track recently played
+        val repository = com.modernmusicplayer.app.data.repository.MusicRepository(context)
+        repository.addRecentlyPlayed(song.id)
+        
         // Check if we need to extract audio URL using Piped
         if (song.audioUrl.startsWith("piped://")) {
             // Extract video ID and get real audio URL

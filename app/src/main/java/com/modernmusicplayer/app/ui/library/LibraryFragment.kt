@@ -57,6 +57,22 @@ class LibraryFragment : Fragment() {
         
         setupRecyclerView()
         setupListeners()
+        
+        // Auto-scan local music on startup if permission granted
+        checkAndAutoScanLocalMusic()
+    }
+    
+    private fun checkAndAutoScanLocalMusic() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        
+        if (ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED) {
+            // Scan silently on startup
+            scanLocalMusic()
+        }
     }
     
     private fun setupRecyclerView() {
@@ -114,6 +130,10 @@ class LibraryFragment : Fragment() {
                 
                 localSongs.clear()
                 localSongs.addAll(songs)
+                
+                // Cache local music in repository for instant access
+                val mainActivity = requireActivity() as MainActivity
+                mainActivity.musicRepository.cacheLocalMusic(songs)
                 
                 if (songs.isNotEmpty()) {
                     songAdapter.submitList(songs)
