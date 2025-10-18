@@ -58,9 +58,36 @@ class LibraryFragment : Fragment() {
         
         setupRecyclerView()
         setupListeners()
+        setupTabs()
         
         // Auto-scan local music on startup if permission granted
         checkAndAutoScanLocalMusic()
+    }
+    
+    private fun setupTabs() {
+        binding.tabLayout.addOnTabSelectedListener(object : com.google.android.material.tabs.TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: com.google.android.material.tabs.TabLayout.Tab?) {
+                when (tab?.position) {
+                    0 -> {
+                        // Local Songs tab - stay here
+                        binding.localSongsSection.visibility = View.VISIBLE
+                    }
+                    1 -> {
+                        // Playlists tab - navigate using NavController
+                        androidx.navigation.Navigation.findNavController(requireView())
+                            .navigate(R.id.nav_playlists)
+                    }
+                    2 -> {
+                        // Favorites tab - navigate to favorites
+                        androidx.navigation.Navigation.findNavController(requireView())
+                            .navigate(R.id.nav_favorites)
+                    }
+                }
+            }
+
+            override fun onTabUnselected(tab: com.google.android.material.tabs.TabLayout.Tab?) {}
+            override fun onTabReselected(tab: com.google.android.material.tabs.TabLayout.Tab?) {}
+        })
     }
     
     private fun checkAndAutoScanLocalMusic() {
